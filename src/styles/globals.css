@@ -1,0 +1,144 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Variáveis globais ─────────────────────────────────────────── */
+:root {
+  --bg-base:        #0a0b0f;
+  --bg-surface:     #10121a;
+  --bg-elevated:    #181c28;
+  --bg-border:      #232840;
+  --accent:         #4df0c0;
+  --accent-dim:     #22d4a0;
+  --text-primary:   #e8edf5;
+  --text-muted:     #8892a4;
+  --text-soft:      #c4cdd8;
+  --font-display:   'Syne', sans-serif;
+  --font-body:      'DM Sans', sans-serif;
+  --font-mono:      'JetBrains Mono', monospace;
+}
+
+/* ── Reset base ────────────────────────────────────────────────── */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  scroll-behavior: smooth;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  background-color: var(--bg-base);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.6;
+  min-height: 100vh;
+}
+
+#root {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Scrollbar customizada ─────────────────────────────────────── */
+::-webkit-scrollbar        { width: 6px; height: 6px; }
+::-webkit-scrollbar-track  { background: var(--bg-surface); }
+::-webkit-scrollbar-thumb  { background: var(--bg-border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+/* ── Seleção de texto ──────────────────────────────────────────── */
+::selection {
+  background: rgba(77, 240, 192, 0.25);
+  color: var(--text-primary);
+}
+
+/* ── Utilitários ───────────────────────────────────────────────── */
+@layer utilities {
+  .font-display  { font-family: var(--font-display); }
+  .font-body     { font-family: var(--font-body); }
+  .font-mono     { font-family: var(--font-mono); }
+
+  .text-accent   { color: var(--accent); }
+
+  .bg-surface    { background-color: var(--bg-surface); }
+  .bg-elevated   { background-color: var(--bg-elevated); }
+  .bg-base       { background-color: var(--bg-base); }
+
+  .border-subtle { border-color: var(--bg-border); }
+
+  /* Efeito glow no accent */
+  .glow-accent {
+    box-shadow: 0 0 20px rgba(77, 240, 192, 0.15),
+                0 0 60px rgba(77, 240, 192, 0.05);
+  }
+
+  /* Gradiente do logo/título */
+  .gradient-text {
+    background: linear-gradient(135deg, var(--accent) 0%, #60d4ff 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  /* Noise texture overlay sutil */
+  .noise::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+    pointer-events: none;
+    border-radius: inherit;
+  }
+}
+
+/* ── Componentes reutilizáveis ─────────────────────────────────── */
+@layer components {
+  /* Botão primário */
+  .btn-primary {
+    @apply inline-flex items-center gap-2 px-5 py-2.5 rounded-lg font-display font-semibold text-sm
+           bg-electric-400 text-ink-950 transition-all duration-200
+           hover:bg-electric-500 hover:scale-[1.02] active:scale-[0.98]
+           focus:outline-none focus:ring-2 focus:ring-electric-400/50;
+  }
+
+  /* Botão secundário/ghost */
+  .btn-ghost {
+    @apply inline-flex items-center gap-2 px-4 py-2 rounded-lg font-body text-sm text-slate-soft
+           border border-ink-700 transition-all duration-200
+           hover:bg-ink-800 hover:text-slate-soft hover:border-ink-600
+           focus:outline-none focus:ring-2 focus:ring-ink-600/50;
+  }
+
+  /* Card genérico */
+  .card {
+    @apply bg-elevated rounded-xl border border-ink-700/60 p-5;
+  }
+
+  /* Input de texto */
+  .input-base {
+    @apply w-full bg-ink-800 border border-ink-700 rounded-lg px-4 py-2.5 text-sm
+           text-slate-soft placeholder:text-slate-muted font-body
+           focus:outline-none focus:border-electric-500 focus:ring-1 focus:ring-electric-500/30
+           transition-all duration-200;
+  }
+
+  /* Badge */
+  .badge {
+    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-mono
+           bg-ink-700 text-slate-soft border border-ink-600/50;
+  }
+
+  /* Cursor piscante do streaming */
+  .streaming-cursor::after {
+    content: '▋';
+    color: var(--accent);
+    animation: blink 1.1s step-end infinite;
+    margin-left: 1px;
+  }
+}
