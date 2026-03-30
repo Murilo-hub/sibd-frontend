@@ -2,14 +2,12 @@
  * services/api.js
  * Cliente HTTP base para comunicação com o backend FastAPI.
  *
- * Em desenvolvimento: usa o proxy do Vite (/api → localhost:8000)
- * Em produção (Netlify): usa a variável VITE_API_URL apontando para o Railway
+ * Em desenvolvimento: proxy do Vite redireciona /api → localhost:8000
+ * Em produção (Netlify): proxy do netlify.toml redireciona /api → Railway
  */
 import axios from 'axios'
 
-const BASE_URL = import.meta.env.VITE_API_URL
-  ? `${import.meta.env.VITE_API_URL}/api`
-  : '/api'
+const BASE_URL = '/api'
 
 const api = axios.create({
   baseURL: BASE_URL,
