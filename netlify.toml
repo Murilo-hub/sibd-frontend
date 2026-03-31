@@ -10,7 +10,7 @@
 # Substitua a URL abaixo pelo seu domínio real do Railway
 [[redirects]]
   from   = "/api/*"
-  to = "https://sibd-backend-production.up.railway.app/api/:splat"
+  to = "sibd-backend-production.up.railway.app"
   status = 200
   force  = true
 
