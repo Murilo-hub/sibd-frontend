@@ -29,10 +29,15 @@ export default function App() {
 
       {/* App principal (protegido por JWT) */}
       <Route path="/chat" element={
-        <ChatPage />
+        <ProtectedRoute>
+          <ChatPage />
+        </ProtectedRoute>
+        
       } />
       <Route path="/upload" element={
-        <UploadPage />
+        <ProtectedRoute>
+          <UploadPage />
+        <ProtectedRoute/>
       } />
 
       {/* 404 */}
