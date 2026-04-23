@@ -7,7 +7,6 @@
   NODE_VERSION = "20"
 
 # Proxy: redireciona chamadas /api/* para o backend no Railway
-# Substitua a URL abaixo pelo seu domínio real do Railway
 [[redirects]]
   from   = "/api/*"
   to     = "https://sibd-backend.onrender.com"
