@@ -52,7 +52,7 @@ export const chatService = {
           const line = part.trim()
           if (!line.startsWith('data:')) continue
 
-          const payload = line.slice('data:'.length).trim()
+          const payload = line.slice('data:'.length).replace(/^\s/, '')
 
           if (payload === '[DONE]') {
             onDone?.(newSessionId)
