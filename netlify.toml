@@ -9,7 +9,7 @@
 # Proxy: redireciona chamadas /api/* para o backend no Render
 [[redirects]]
   from   = "/api/*"
-  to     = "https://sibd-backend-1.onrender.com"
+  to     = "https://sibd-backend-1.onrender.com/api/:splat"
   status = 200
   force  = true
 
