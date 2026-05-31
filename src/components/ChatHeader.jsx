@@ -1,9 +1,9 @@
 /**
  * components/ChatHeader.jsx
- * Barra superior do chat: título da conversa ativa, documento em contexto e ações.
+ * Barra superior do chat: título da conversa ativa e ações.
  */
 import { clsx } from 'clsx'
-import { FileText, Trash2, Download, MoreHorizontal, Menu } from 'lucide-react'
+import { Trash2, Download, MoreHorizontal, Menu } from 'lucide-react'
 
 export default function ChatHeader({ title, onClear, onMobileMenuToggle }) {
   return (
@@ -21,20 +21,12 @@ export default function ChatHeader({ title, onClear, onMobileMenuToggle }) {
         <h1 className="font-display font-semibold text-sm text-slate-soft truncate">
           {title || 'Nova consulta'}
         </h1>
-
-        {/* Indicador de documento em contexto */}
         <div className="flex items-center gap-1.5 mt-0.5">
           <div className="w-1.5 h-1.5 rounded-full bg-electric-400 animate-pulse-slow" />
           <span className="text-[11px] font-mono text-slate-muted">
-            RAG ativo · ChromaDB
+            RAG ativo · pgvector
           </span>
         </div>
-      </div>
-
-      {/* Documento pinado (contexto atual) */}
-      <div className="hidden sm:flex items-center gap-1.5 badge">
-        <FileText size={11} className="text-accent" />
-        <span className="font-mono text-[11px]">Contrato Social XYZ.pdf</span>
       </div>
 
       {/* Ações */}
