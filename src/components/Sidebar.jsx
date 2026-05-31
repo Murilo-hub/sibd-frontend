@@ -2,32 +2,38 @@
  * components/Sidebar.jsx
  * Painel lateral: logo, botão de novo chat, histórico de conversas e ações do usuário.
  */
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { clsx } from 'clsx'
 import { useNavigate } from 'react-router-dom'
 import {
   Plus, MessageSquare, FileText, ChevronRight,
   LogOut, Settings, Search, Clock
 } from 'lucide-react'
-
-// ── Mock de histórico ─────────────────────────────────────────────────────────
-const MOCK_HISTORY = [
-  { id: 1, title: 'Contrato Social Empresa XYZ', date: 'Hoje', active: true },
-  { id: 2, title: 'Relatório financeiro Q3 2024', date: 'Hoje' },
-  { id: 3, title: 'Política de privacidade atualizada', date: 'Ontem' },
-  { id: 4, title: 'Ata reunião board outubro', date: 'Ontem' },
-  { id: 5, title: 'NDA fornecedor Alpha Ltda', date: '22 jan' },
-  { id: 6, title: 'Manual de compliance interno', date: '18 jan' },
-  { id: 7, title: 'Balanço patrimonial 2023', date: '10 jan' },
-]
+import { chatService }  from '../services/chatService'
+import { authService }  from '../services/authService'
 
 export default function Sidebar({ onNewChat, collapsed, onToggle }) {
   const [searchQuery, setSearchQuery] = useState('')
+  const [history,     setHistory]     = useState([])
+  const [user,        setUser]        = useState(null)
   const navigate = useNavigate()
 
-  const filtered = MOCK_HISTORY.filter((h) =>
+  // Carrega histórico de sessões e dados do usuário ao montar
+  useEffect(() => {
+    chatService.getHistory()
+      .then((data) => setHistory(data.sessions ?? []))
+      .catch(() => setHistory([]))
+
+    authService.getMe()
+      .then((data) => setUser(data))
+      .catch(() => setUser(null))
+  }, [])
+
+  const filtered = history.filter((h) =>
     h.title.toLowerCase().includes(searchQuery.toLowerCase())
   )
+
+  const handleLogout = () => authService.logout()
 
   return (
     <aside
@@ -102,20 +108,14 @@ export default function Sidebar({ onNewChat, collapsed, onToggle }) {
             key={item.id}
             className={clsx(
               'w-full flex items-start gap-2.5 rounded-lg px-2 py-2 text-left transition-all duration-150',
-              item.active
-                ? 'bg-elevated text-slate-soft border border-ink-700/60'
-                : 'text-slate-muted hover:bg-elevated hover:text-slate-soft'
+              'text-slate-muted hover:bg-elevated hover:text-slate-soft'
             )}
             title={collapsed ? item.title : undefined}
           >
-            <MessageSquare
-              size={14}
-              className={clsx('mt-0.5 shrink-0', item.active ? 'text-accent' : '')}
-            />
+            <MessageSquare size={14} className="mt-0.5 shrink-0" />
             {!collapsed && (
               <div className="flex-1 min-w-0">
                 <p className="text-xs leading-snug truncate">{item.title}</p>
-                <span className="text-[11px] font-mono text-slate-muted">{item.date}</span>
               </div>
             )}
           </button>
@@ -123,7 +123,7 @@ export default function Sidebar({ onNewChat, collapsed, onToggle }) {
 
         {!collapsed && filtered.length === 0 && (
           <p className="px-2 py-4 text-xs text-slate-muted text-center">
-            Nenhuma conversa encontrada
+            Nenhuma conversa ainda
           </p>
         )}
       </div>
@@ -131,21 +131,27 @@ export default function Sidebar({ onNewChat, collapsed, onToggle }) {
       {/* ── Rodapé ───────────────────────────────────────────────────────── */}
       <div className="border-t border-subtle px-2 py-3 space-y-0.5">
         <SidebarFooterBtn icon={<FileText size={15} />} label="Documentos" collapsed={collapsed} onClick={() => navigate('/upload')} />
-        <SidebarFooterBtn icon={<Clock size={15} />} label="Histórico" collapsed={collapsed} />
+        <SidebarFooterBtn icon={<Clock size={15} />}    label="Histórico"  collapsed={collapsed} />
         <SidebarFooterBtn icon={<Settings size={15} />} label="Configurações" collapsed={collapsed} />
 
         {/* Avatar / logout */}
         <div className="flex items-center gap-2.5 px-2 py-2 mt-1">
           <div className="w-7 h-7 rounded-full bg-electric-400/20 border border-electric-400/30 flex items-center justify-center shrink-0">
-            <span className="text-xs font-display font-bold text-accent">U</span>
+            <span className="text-xs font-display font-bold text-accent">
+              {user?.name?.[0]?.toUpperCase() ?? 'U'}
+            </span>
           </div>
           {!collapsed && (
             <>
               <div className="flex-1 min-w-0">
-                <p className="text-xs font-medium text-slate-soft truncate">Usuário</p>
-                <p className="text-[11px] text-slate-muted truncate">usuario@empresa.com</p>
+                <p className="text-xs font-medium text-slate-soft truncate">{user?.name ?? 'Usuário'}</p>
+                <p className="text-[11px] text-slate-muted truncate">{user?.email ?? ''}</p>
               </div>
-              <button className="p-1 rounded text-slate-muted hover:text-slate-soft transition-colors" title="Sair">
+              <button
+                onClick={handleLogout}
+                className="p-1 rounded text-slate-muted hover:text-slate-soft transition-colors"
+                title="Sair"
+              >
                 <LogOut size={13} />
               </button>
             </>
