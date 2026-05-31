@@ -1,24 +1,20 @@
 /**
  * components/MessageBubble.jsx
  * Renderiza uma mensagem individual (usuário ou assistente).
- * Suporta modo streaming com cursor piscante e exibição de fontes.
+ * Suporta modo streaming com cursor piscante e exibição de fontes reais.
  */
 import { clsx } from 'clsx'
 import { FileText, User, Bot, AlertCircle, ChevronDown, ChevronUp } from 'lucide-react'
 import { useState } from 'react'
-
-// ── Mock de fontes (RF08) ─────────────────────────────────────────────────────
-const MOCK_SOURCES = [
-  { id: 's1', file: 'Contrato Social XYZ.pdf', page: 3, excerpt: 'Art. 5º — O capital social é de R$ 500.000,00...' },
-  { id: 's2', file: 'Estatuto 2023.pdf', page: 11, excerpt: 'Cláusula 12 — Em caso de dissolução da sociedade...' },
-]
 
 export default function MessageBubble({ message }) {
   const { role, content, streaming, error, sources } = message
   const isUser = role === 'user'
   const [sourcesOpen, setSourcesOpen] = useState(false)
 
-  const hasSources = !isUser && !streaming && !error && sources?.length > 0
+  const realSources = !isUser && !streaming && !error && Array.isArray(sources) && sources.length > 0
+    ? sources
+    : []
 
   return (
     <div
@@ -38,7 +34,7 @@ export default function MessageBubble({ message }) {
       >
         {isUser
           ? <User size={15} className="text-slate-soft" />
-          : <Bot size={15} className="text-accent" />
+          : <Bot  size={15} className="text-accent" />
         }
       </div>
 
@@ -61,29 +57,28 @@ export default function MessageBubble({ message }) {
             </span>
           )}
 
-          {/* Texto com cursor de streaming */}
           <span className="font-body whitespace-pre-wrap">
             {content || (streaming && '')}
           </span>
           {streaming && <span className="streaming-cursor" />}
         </div>
 
-        {/* ── Fontes (RF08) ────────────────────────────────────────────── */}
-        {hasSources && (
+        {/* ── Fontes reais ─────────────────────────────────────────────── */}
+        {realSources.length > 0 && (
           <div className="mt-2 w-full max-w-full">
             <button
               onClick={() => setSourcesOpen((v) => !v)}
               className="flex items-center gap-1.5 text-xs text-slate-muted hover:text-slate-soft transition-colors font-mono"
             >
               <FileText size={11} />
-              {MOCK_SOURCES.length} fonte{MOCK_SOURCES.length > 1 ? 's' : ''} consultada{MOCK_SOURCES.length > 1 ? 's' : ''}
+              {realSources.length} fonte{realSources.length > 1 ? 's' : ''} consultada{realSources.length > 1 ? 's' : ''}
               {sourcesOpen ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
             </button>
 
             {sourcesOpen && (
               <div className="mt-1.5 space-y-1.5 animate-fade-in">
-                {MOCK_SOURCES.map((src) => (
-                  <SourceCard key={src.id} source={src} />
+                {realSources.map((src, i) => (
+                  <SourceCard key={i} source={src} />
                 ))}
               </div>
             )}
@@ -95,16 +90,26 @@ export default function MessageBubble({ message }) {
 }
 
 function SourceCard({ source }) {
+  const fileName = source.metadata?.original_name ?? source.document_id ?? 'Documento'
+  const excerpt  = source.excerpt ?? source.content?.slice(0, 200) ?? ''
+  const similarity = source.similarity ? `${Math.round(source.similarity * 100)}%` : null
+
   return (
     <div className="rounded-lg border border-ink-700/60 bg-ink-900/40 px-3 py-2.5">
       <div className="flex items-center gap-1.5 mb-1">
         <FileText size={11} className="text-accent shrink-0" />
-        <span className="text-xs font-mono text-accent truncate">{source.file}</span>
-        <span className="ml-auto text-[11px] font-mono text-slate-muted shrink-0">p. {source.page}</span>
+        <span className="text-xs font-mono text-accent truncate">{fileName}</span>
+        {similarity && (
+          <span className="ml-auto text-[11px] font-mono text-slate-muted shrink-0">
+            {similarity}
+          </span>
+        )}
       </div>
-      <p className="text-xs text-slate-muted leading-snug line-clamp-2 italic">
-        "{source.excerpt}"
-      </p>
+      {excerpt && (
+        <p className="text-xs text-slate-muted leading-snug line-clamp-2 italic">
+          "{excerpt}"
+        </p>
+      )}
     </div>
   )
 }
