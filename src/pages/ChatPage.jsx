@@ -12,7 +12,7 @@ import { useChat } from '../hooks/useChat'
 
 export default function ChatPage() {
   const navigate = useNavigate()
-  const { messages, streaming, sendMessage, clearMessages } = useChat()
+  const { messages, streaming, sessionId, sendMessage, loadSession, clearMessages } = useChat()
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [chatTitle,   setChatTitle]   = useState('')
 
@@ -27,10 +27,17 @@ export default function ChatPage() {
     setChatTitle('')
   }, [clearMessages])
 
+  const handleSelectSession = useCallback((session) => {
+    loadSession(session.id)
+    setChatTitle(session.title)
+  }, [loadSession])
+
   return (
     <div className="flex h-screen overflow-hidden bg-base">
       <Sidebar
         onNewChat={handleClear}
+        onSelectSession={handleSelectSession}
+        activeSessionId={sessionId}
         collapsed={!sidebarOpen}
         onToggle={() => setSidebarOpen((v) => !v)}
       />
