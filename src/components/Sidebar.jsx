@@ -12,13 +12,12 @@ import {
 import { chatService }  from '../services/chatService'
 import { authService }  from '../services/authService'
 
-export default function Sidebar({ onNewChat, collapsed, onToggle }) {
+export default function Sidebar({ onNewChat, onSelectSession, activeSessionId, collapsed, onToggle }) {
   const [searchQuery, setSearchQuery] = useState('')
   const [history,     setHistory]     = useState([])
   const [user,        setUser]        = useState(null)
   const navigate = useNavigate()
 
-  // Carrega histórico de sessões e dados do usuário ao montar
   useEffect(() => {
     chatService.getHistory()
       .then((data) => setHistory(data.sessions ?? []))
@@ -29,11 +28,17 @@ export default function Sidebar({ onNewChat, collapsed, onToggle }) {
       .catch(() => setUser(null))
   }, [])
 
+  // Recarrega o histórico quando uma nova sessão é criada
+  useEffect(() => {
+    if (!activeSessionId) return
+    chatService.getHistory()
+      .then((data) => setHistory(data.sessions ?? []))
+      .catch(() => {})
+  }, [activeSessionId])
+
   const filtered = history.filter((h) =>
     h.title.toLowerCase().includes(searchQuery.toLowerCase())
   )
-
-  const handleLogout = () => authService.logout()
 
   return (
     <aside
@@ -106,13 +111,19 @@ export default function Sidebar({ onNewChat, collapsed, onToggle }) {
         {filtered.map((item) => (
           <button
             key={item.id}
+            onClick={() => onSelectSession?.(item)}
             className={clsx(
               'w-full flex items-start gap-2.5 rounded-lg px-2 py-2 text-left transition-all duration-150',
-              'text-slate-muted hover:bg-elevated hover:text-slate-soft'
+              String(item.id) === String(activeSessionId)
+                ? 'bg-elevated text-slate-soft border border-ink-700/60'
+                : 'text-slate-muted hover:bg-elevated hover:text-slate-soft'
             )}
             title={collapsed ? item.title : undefined}
           >
-            <MessageSquare size={14} className="mt-0.5 shrink-0" />
+            <MessageSquare
+              size={14}
+              className={clsx('mt-0.5 shrink-0', String(item.id) === String(activeSessionId) && 'text-accent')}
+            />
             {!collapsed && (
               <div className="flex-1 min-w-0">
                 <p className="text-xs leading-snug truncate">{item.title}</p>
@@ -130,11 +141,10 @@ export default function Sidebar({ onNewChat, collapsed, onToggle }) {
 
       {/* ── Rodapé ───────────────────────────────────────────────────────── */}
       <div className="border-t border-subtle px-2 py-3 space-y-0.5">
-        <SidebarFooterBtn icon={<FileText size={15} />} label="Documentos" collapsed={collapsed} onClick={() => navigate('/upload')} />
-        <SidebarFooterBtn icon={<Clock size={15} />}    label="Histórico"  collapsed={collapsed} />
+        <SidebarFooterBtn icon={<FileText size={15} />} label="Documentos"    collapsed={collapsed} onClick={() => navigate('/upload')} />
+        <SidebarFooterBtn icon={<Clock    size={15} />} label="Histórico"     collapsed={collapsed} />
         <SidebarFooterBtn icon={<Settings size={15} />} label="Configurações" collapsed={collapsed} />
 
-        {/* Avatar / logout */}
         <div className="flex items-center gap-2.5 px-2 py-2 mt-1">
           <div className="w-7 h-7 rounded-full bg-electric-400/20 border border-electric-400/30 flex items-center justify-center shrink-0">
             <span className="text-xs font-display font-bold text-accent">
@@ -148,7 +158,7 @@ export default function Sidebar({ onNewChat, collapsed, onToggle }) {
                 <p className="text-[11px] text-slate-muted truncate">{user?.email ?? ''}</p>
               </div>
               <button
-                onClick={handleLogout}
+                onClick={() => authService.logout()}
                 className="p-1 rounded text-slate-muted hover:text-slate-soft transition-colors"
                 title="Sair"
               >
