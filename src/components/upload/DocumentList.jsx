@@ -2,30 +2,54 @@
  * components/upload/DocumentList.jsx
  * Lista de documentos já indexados no sistema, com busca e ações.
  */
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { clsx } from 'clsx'
-import { Search, FileText, Trash2, MessageSquare, Calendar, Building2, Tag } from 'lucide-react'
+import { Search, FileText, Trash2, MessageSquare, Calendar, Building2, Tag, Loader2 } from 'lucide-react'
 import { formatDate, fileTypeInfo, truncate } from '../../utils'
+import { documentService } from '../../services/documentService'
 
-// ── Mock de documentos indexados ─────────────────────────────────────────────
-const MOCK_DOCS = [
-  { id: 1, name: 'Contrato Social XYZ.pdf',           empresa: 'XYZ Ltda',      categoria: 'Societário',   tipo: 'PDF',  tamanho: '340 KB', indexado: '2025-01-15T10:00:00Z', chunks: 42 },
-  { id: 2, name: 'Relatório Financeiro Q3 2024.pdf',  empresa: 'XYZ Ltda',      categoria: 'Financeiro',   tipo: 'PDF',  tamanho: '1.2 MB', indexado: '2025-01-14T14:22:00Z', chunks: 118 },
-  { id: 3, name: 'Política de Privacidade v2.docx',   empresa: 'Alpha Corp',    categoria: 'Compliance',   tipo: 'DOCX', tamanho: '128 KB', indexado: '2025-01-13T09:10:00Z', chunks: 31 },
-  { id: 4, name: 'Ata Reunião Board Outubro.docx',    empresa: 'XYZ Ltda',      categoria: 'Governança',   tipo: 'DOCX', tamanho: '95 KB',  indexado: '2025-01-12T16:45:00Z', chunks: 24 },
-  { id: 5, name: 'NDA Fornecedor Alpha Ltda.pdf',     empresa: 'Alpha Ltda',    categoria: 'Contratos',    tipo: 'PDF',  tamanho: '210 KB', indexado: '2025-01-10T11:30:00Z', chunks: 19 },
-  { id: 6, name: 'Manual de Compliance Interno.pdf',  empresa: 'XYZ Ltda',      categoria: 'Compliance',   tipo: 'PDF',  tamanho: '2.1 MB', indexado: '2025-01-08T08:00:00Z', chunks: 204 },
-]
-
-export default function DocumentList() {
-  const [search, setSearch]   = useState('')
+export default function DocumentList({ refreshTrigger = 0 }) {
+  const [docs,    setDocs]    = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error,   setError]   = useState(null)
+  const [search,  setSearch]  = useState('')
   const [confirm, setConfirm] = useState(null) // id para confirmar exclusão
 
-  const filtered = MOCK_DOCS.filter((d) =>
-    d.name.toLowerCase().includes(search.toLowerCase()) ||
-    d.empresa.toLowerCase().includes(search.toLowerCase()) ||
-    d.categoria.toLowerCase().includes(search.toLowerCase())
-  )
+  const fetchDocs = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const data = await documentService.list()
+      // API retorna { documents: [...], total: N } ou array direto
+      setDocs(Array.isArray(data) ? data : (data.documents ?? []))
+    } catch (err) {
+      setError('Não foi possível carregar os documentos.')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  // Carrega na montagem e toda vez que um upload novo é concluído
+  useEffect(() => { fetchDocs() }, [fetchDocs, refreshTrigger])
+
+  const handleDelete = async (id) => {
+    try {
+      await documentService.delete(id)
+      setDocs((prev) => prev.filter((d) => d.id !== id))
+    } catch {
+      // mantém o item na lista se falhar
+    }
+    setConfirm(null)
+  }
+
+  const filtered = docs.filter((d) => {
+    const q = search.toLowerCase()
+    return (
+      (d.filename ?? d.name ?? '').toLowerCase().includes(q) ||
+      (d.empresa ?? '').toLowerCase().includes(q) ||
+      (d.categoria ?? '').toLowerCase().includes(q)
+    )
+  })
 
   return (
     <div className="space-y-3">
@@ -36,7 +60,7 @@ export default function DocumentList() {
             Documentos indexados
           </h2>
           <p className="text-xs text-slate-muted font-mono mt-0.5">
-            {MOCK_DOCS.length} documento{MOCK_DOCS.length !== 1 ? 's' : ''} no sistema
+            {loading ? '...' : `${docs.length} documento${docs.length !== 1 ? 's' : ''} no sistema`}
           </p>
         </div>
 
@@ -53,12 +77,26 @@ export default function DocumentList() {
         </div>
       </div>
 
-      {/* Lista */}
-      {filtered.length === 0 ? (
-        <div className="text-center py-10 text-slate-muted text-sm">
-          Nenhum documento encontrado.
+      {/* Estados */}
+      {loading && (
+        <div className="flex items-center justify-center py-10 gap-2 text-slate-muted text-sm">
+          <Loader2 size={16} className="animate-spin" />
+          Carregando documentos...
         </div>
-      ) : (
+      )}
+
+      {!loading && error && (
+        <div className="text-center py-10 text-red-400 text-sm">{error}</div>
+      )}
+
+      {!loading && !error && filtered.length === 0 && (
+        <div className="text-center py-10 text-slate-muted text-sm">
+          {docs.length === 0 ? 'Nenhum documento indexado ainda.' : 'Nenhum documento encontrado.'}
+        </div>
+      )}
+
+      {/* Lista */}
+      {!loading && !error && filtered.length > 0 && (
         <div className="space-y-2">
           {filtered.map((doc) => (
             <DocRow
@@ -67,7 +105,7 @@ export default function DocumentList() {
               confirming={confirm === doc.id}
               onConfirmDelete={() => setConfirm(doc.id)}
               onCancelDelete={() => setConfirm(null)}
-              onDelete={() => { setConfirm(null); /* TODO: chamar API */ }}
+              onDelete={() => handleDelete(doc.id)}
             />
           ))}
         </div>
@@ -77,7 +115,11 @@ export default function DocumentList() {
 }
 
 function DocRow({ doc, confirming, onConfirmDelete, onCancelDelete, onDelete }) {
-  const typeInfo = fileTypeInfo(doc.name)
+  const name     = doc.filename ?? doc.name ?? 'Sem nome'
+  const typeInfo = fileTypeInfo(name)
+  const chunks   = doc.chunk_count ?? doc.chunks ?? '—'
+  const size     = doc.file_size_kb ? `${doc.file_size_kb} KB` : (doc.tamanho ?? '—')
+  const indexado = doc.created_at ?? doc.indexado
 
   return (
     <div className={clsx(
@@ -97,27 +139,31 @@ function DocRow({ doc, confirming, onConfirmDelete, onCancelDelete, onDelete }) 
 
         {/* Info principal */}
         <div className="flex-1 min-w-0">
-          <p className="text-sm text-slate-soft font-medium truncate">{doc.name}</p>
+          <p className="text-sm text-slate-soft font-medium truncate">{name}</p>
 
           <div className="flex items-center gap-3 mt-1 flex-wrap">
-            <span className="flex items-center gap-1 text-[11px] font-mono text-slate-muted">
-              <Building2 size={10} /> {doc.empresa}
-            </span>
-            <span className="flex items-center gap-1 text-[11px] font-mono text-slate-muted">
-              <Tag size={10} /> {doc.categoria}
-            </span>
-            <span className="flex items-center gap-1 text-[11px] font-mono text-slate-muted">
-              <Calendar size={10} /> {formatDate(doc.indexado)}
-            </span>
+            {doc.empresa && (
+              <span className="flex items-center gap-1 text-[11px] font-mono text-slate-muted">
+                <Building2 size={10} /> {doc.empresa}
+              </span>
+            )}
+            {doc.categoria && (
+              <span className="flex items-center gap-1 text-[11px] font-mono text-slate-muted">
+                <Tag size={10} /> {doc.categoria}
+              </span>
+            )}
+            {indexado && (
+              <span className="flex items-center gap-1 text-[11px] font-mono text-slate-muted">
+                <Calendar size={10} /> {formatDate(indexado)}
+              </span>
+            )}
           </div>
         </div>
 
         {/* Chunks badge */}
         <div className="hidden sm:flex flex-col items-end shrink-0 gap-1">
-          <span className="badge text-[10px]">
-            {doc.chunks} chunks
-          </span>
-          <span className="text-[11px] font-mono text-slate-muted">{doc.tamanho}</span>
+          <span className="badge text-[10px]">{chunks} chunks</span>
+          <span className="text-[11px] font-mono text-slate-muted">{size}</span>
         </div>
 
         {/* Ações */}

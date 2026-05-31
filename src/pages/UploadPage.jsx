@@ -5,8 +5,6 @@
  * - Formulário de metadados
  * - Fila de envio com progresso
  * - Lista de documentos já indexados
- *
- * Mock de upload: simula progresso e indexação sem backend.
  */
 import { useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
@@ -17,37 +15,19 @@ import DropZone     from '../components/upload/DropZone'
 import MetadataForm from '../components/upload/MetadataForm'
 import FileQueue    from '../components/upload/FileQueue'
 import DocumentList from '../components/upload/DocumentList'
+import { documentService } from '../services/documentService'
 import { uid }      from '../utils'
-
-// ── Simulação de upload (remove quando backend estiver pronto) ────────────────
-function mockUpload(onProgress, onProcessing, onDone) {
-  let p = 0
-  const uploadInterval = setInterval(() => {
-    p += Math.random() * 18 + 5
-    if (p >= 100) {
-      p = 100
-      clearInterval(uploadInterval)
-      onProgress(100)
-      onProcessing()
-      // Simula indexação (chunking + embeddings)
-      setTimeout(onDone, 1800)
-    } else {
-      onProgress(Math.round(p))
-    }
-  }, 120)
-}
-// ─────────────────────────────────────────────────────────────────────────────
 
 const EMPTY_META = { empresa: '', categoria: '', data: '', descricao: '' }
 
 export default function UploadPage() {
   const navigate = useNavigate()
 
-  const [sidebarOpen, setSidebarOpen] = useState(true)
-  const [queue,       setQueue]       = useState([])
-  const [metadata,    setMetadata]    = useState(EMPTY_META)
-  const [metaErrors,  setMetaErrors]  = useState({})
-  const [uploading,   setUploading]   = useState(false)
+  const [sidebarOpen,  setSidebarOpen]  = useState(true)
+  const [queue,        setQueue]        = useState([])
+  const [metadata,     setMetadata]     = useState(EMPTY_META)
+  const [metaErrors,   setMetaErrors]   = useState({})
+  const [uploading,    setUploading]    = useState(false)
   const [successCount, setSuccessCount] = useState(0)
 
   // Adiciona arquivos à fila
@@ -77,42 +57,60 @@ export default function UploadPage() {
   }
 
   // Dispara o upload de todos os arquivos pendentes
-  const handleUploadAll = useCallback(() => {
+  const handleUploadAll = useCallback(async () => {
     if (!validateMeta()) return
     const pending = queue.filter((f) => f.status === 'pending')
     if (!pending.length) return
 
     setUploading(true)
 
-    pending.forEach((item) => {
+    for (const item of pending) {
       // Muda status para uploading
       setQueue((prev) =>
         prev.map((f) => f.id === item.id ? { ...f, status: 'uploading' } : f)
       )
 
-      mockUpload(
-        // onProgress
-        (p) => setQueue((prev) =>
-          prev.map((f) => f.id === item.id ? { ...f, progress: p } : f)
-        ),
-        // onProcessing (indexando)
-        () => setQueue((prev) =>
-          prev.map((f) => f.id === item.id ? { ...f, status: 'processing', progress: 100 } : f)
-        ),
-        // onDone
-        () => {
-          setQueue((prev) =>
-            prev.map((f) => f.id === item.id ? { ...f, status: 'done' } : f)
+      try {
+        await documentService.upload(
+          item.file,
+          {
+            empresa:        metadata.empresa,
+            categoria:      metadata.categoria,
+            data_documento: metadata.data || undefined,
+            descricao:      metadata.descricao || undefined,
+          },
+          // onProgress
+          (p) => setQueue((prev) =>
+            prev.map((f) => f.id === item.id ? { ...f, progress: p } : f)
           )
-          setSuccessCount((n) => n + 1)
-          setUploading(false)
-        }
-      )
-    })
+        )
+
+        // upload concluído — mostra status de processamento (indexação em background)
+        setQueue((prev) =>
+          prev.map((f) => f.id === item.id ? { ...f, status: 'processing', progress: 100 } : f)
+        )
+
+        // pequeno delay para mostrar "indexando" antes de marcar como done
+        await new Promise((r) => setTimeout(r, 800))
+
+        setQueue((prev) =>
+          prev.map((f) => f.id === item.id ? { ...f, status: 'done' } : f)
+        )
+        setSuccessCount((n) => n + 1)
+
+      } catch (err) {
+        const msg = err?.response?.data?.detail || 'Erro no upload'
+        setQueue((prev) =>
+          prev.map((f) => f.id === item.id ? { ...f, status: 'error', error: msg } : f)
+        )
+      }
+    }
+
+    setUploading(false)
   }, [queue, metadata])
 
-  const pendingCount  = queue.filter((f) => f.status === 'pending').length
-  const allDone       = queue.length > 0 && queue.every((f) => f.status === 'done' || f.status === 'error')
+  const pendingCount = queue.filter((f) => f.status === 'pending').length
+  const allDone      = queue.length > 0 && queue.every((f) => f.status === 'done' || f.status === 'error')
 
   return (
     <div className="flex h-screen overflow-hidden bg-base">
@@ -208,7 +206,7 @@ export default function UploadPage() {
 
           {/* ── Documentos já indexados ──────────────────────────────────── */}
           <section className="space-y-4 pt-4 border-t border-subtle">
-            <DocumentList />
+            <DocumentList refreshTrigger={successCount} />
           </section>
 
         </div>
