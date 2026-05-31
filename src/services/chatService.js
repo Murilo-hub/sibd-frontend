@@ -5,17 +5,20 @@
 import api from './api'
 
 export const chatService = {
-  /** Busca histórico de conversas */
+  /** Busca histórico de sessões */
   async getHistory() {
     const { data } = await api.get('/chat/history')
     return data
   },
 
+  /** Busca mensagens de uma sessão específica */
+  async getSessionMessages(sessionId) {
+    const { data } = await api.get(`/chat/${sessionId}`)
+    return data
+  },
+
   /**
    * Envia mensagem e recebe resposta com streaming SSE.
-   * onChunk(text)         — chamado a cada token recebido
-   * onDone(sessionId)     — chamado ao receber [DONE], com o session_id do header
-   * onError(err)          — chamado em caso de falha
    */
   async sendMessage(message, onChunk, onDone, onError, sessionId = null) {
     const token = localStorage.getItem('sibd_token')
@@ -31,7 +34,6 @@ export const chatService = {
 
       if (!response.ok) throw new Error(`HTTP ${response.status}`)
 
-      // Captura o session_id retornado no header (útil para continuar a sessão)
       const newSessionId = response.headers.get('X-Session-Id')
 
       const reader  = response.body.getReader()
@@ -44,15 +46,15 @@ export const chatService = {
 
         buffer += decoder.decode(value, { stream: true })
 
-        // Processa todas as linhas SSE completas (terminadas em \n\n)
         const parts = buffer.split('\n\n')
-        buffer = parts.pop() // guarda fragmento incompleto para a próxima iteração
+        buffer = parts.pop()
 
         for (const part of parts) {
           const line = part.trim()
           if (!line.startsWith('data:')) continue
 
-          const payload = line.slice('data:'.length).replace(/^\s/, '')
+          // Remove apenas o prefixo 'data:' + um espaço opcional, preservando o resto
+          const payload = line.replace(/^data: ?/, '')
 
           if (payload === '[DONE]') {
             onDone?.(newSessionId)
@@ -68,7 +70,6 @@ export const chatService = {
         }
       }
 
-      // Fallback: stream encerrou sem [DONE]
       onDone?.(newSessionId)
     } catch (err) {
       onError?.(err)
