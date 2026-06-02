@@ -1,22 +1,19 @@
 /**
  * pages/UploadPage.jsx
- * Página de upload de documentos:
- * - Dropzone de arquivos
- * - Formulário de metadados
- * - Fila de envio com progresso
- * - Lista de documentos já indexados
+ * Upload de documentos conectado ao backend real.
+ * Remove mockUpload — usa documentService com API.
  */
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { clsx } from 'clsx'
 import { ArrowLeft, Upload, CheckCircle2 } from 'lucide-react'
-import Sidebar      from '../components/Sidebar'
-import DropZone     from '../components/upload/DropZone'
-import MetadataForm from '../components/upload/MetadataForm'
-import FileQueue    from '../components/upload/FileQueue'
-import DocumentList from '../components/upload/DocumentList'
+import Sidebar        from '../components/Sidebar'
+import DropZone       from '../components/upload/DropZone'
+import MetadataForm   from '../components/upload/MetadataForm'
+import FileQueue      from '../components/upload/FileQueue'
+import DocumentList   from '../components/upload/DocumentList'
 import { documentService } from '../services/documentService'
-import { uid }      from '../utils'
+import { uid } from '../utils'
 
 const EMPTY_META = { empresa: '', categoria: '', data: '', descricao: '' }
 
@@ -30,42 +27,59 @@ export default function UploadPage() {
   const [uploading,    setUploading]    = useState(false)
   const [successCount, setSuccessCount] = useState(0)
 
-  // Adiciona arquivos à fila
+  // ── Estado da lista de documentos ──────────────────────────────────────────
+  const [documents,     setDocuments]     = useState([])
+  const [docsLoading,   setDocsLoading]   = useState(true)
+
+  // Carrega documentos ao montar e sempre que um upload for concluído
+  const loadDocuments = useCallback(async () => {
+    setDocsLoading(true)
+    try {
+      const result = await documentService.list()
+      setDocuments(result.items ?? [])
+    } catch (err) {
+      console.error('Erro ao carregar documentos:', err)
+    } finally {
+      setDocsLoading(false)
+    }
+  }, [])
+
+  // Carrega na montagem do componente
+  useEffect(() => {
+    loadDocuments()
+  }, [loadDocuments])
+
+  // ── Fila de upload ──────────────────────────────────────────────────────────
   const handleFilesSelected = useCallback((files) => {
     const newItems = files.map((file) => ({
-      id:       uid(),
-      file,
-      status:   'pending',
-      progress: 0,
-      error:    null,
+      id: uid(), file, status: 'pending', progress: 0, error: null,
     }))
     setQueue((prev) => [...prev, ...newItems])
   }, [])
 
-  // Remove da fila
   const handleRemove = useCallback((id) => {
     setQueue((prev) => prev.filter((f) => f.id !== id))
   }, [])
 
-  // Valida metadados
   const validateMeta = () => {
     const errs = {}
-    if (!metadata.empresa.trim())   errs.empresa   = 'Campo obrigatório'
-    if (!metadata.categoria)        errs.categoria = 'Selecione uma categoria'
+    if (!metadata.empresa.trim()) errs.empresa   = 'Campo obrigatório'
+    if (!metadata.categoria)      errs.categoria = 'Selecione uma categoria'
     setMetaErrors(errs)
     return Object.keys(errs).length === 0
   }
 
-  // Dispara o upload de todos os arquivos pendentes
+  // ── Upload real via API ─────────────────────────────────────────────────────
   const handleUploadAll = useCallback(async () => {
     if (!validateMeta()) return
     const pending = queue.filter((f) => f.status === 'pending')
     if (!pending.length) return
 
     setUploading(true)
+    let doneCount = 0
 
     for (const item of pending) {
-      // Muda status para uploading
+      // Muda para uploading
       setQueue((prev) =>
         prev.map((f) => f.id === item.id ? { ...f, status: 'uploading' } : f)
       )
@@ -73,85 +87,83 @@ export default function UploadPage() {
       try {
         await documentService.upload(
           item.file,
-          {
-            empresa:        metadata.empresa,
-            categoria:      metadata.categoria,
-            data_documento: metadata.data || undefined,
-            descricao:      metadata.descricao || undefined,
-          },
-          // onProgress
-          (p) => setQueue((prev) =>
-            prev.map((f) => f.id === item.id ? { ...f, progress: p } : f)
+          metadata,
+          (progress) => {
+            // Atualiza barra de progresso em tempo real
+            setQueue((prev) =>
+              prev.map((f) => f.id === item.id ? { ...f, progress } : f)
+            )
+          }
+        )
+
+        // Upload concluído — backend indexa em background
+        setQueue((prev) =>
+          prev.map((f) =>
+            f.id === item.id ? { ...f, status: 'done', progress: 100 } : f
           )
         )
-
-        // upload concluído — mostra status de processamento (indexação em background)
-        setQueue((prev) =>
-          prev.map((f) => f.id === item.id ? { ...f, status: 'processing', progress: 100 } : f)
-        )
-
-        // pequeno delay para mostrar "indexando" antes de marcar como done
-        await new Promise((r) => setTimeout(r, 800))
-
-        setQueue((prev) =>
-          prev.map((f) => f.id === item.id ? { ...f, status: 'done' } : f)
-        )
-        setSuccessCount((n) => n + 1)
+        doneCount++
 
       } catch (err) {
-        const msg = err?.response?.data?.detail || 'Erro no upload'
+        const msg = err.response?.data?.detail ?? 'Erro no upload'
         setQueue((prev) =>
-          prev.map((f) => f.id === item.id ? { ...f, status: 'error', error: msg } : f)
+          prev.map((f) =>
+            f.id === item.id ? { ...f, status: 'error', error: msg } : f
+          )
         )
       }
     }
 
     setUploading(false)
-  }, [queue, metadata])
+    if (doneCount > 0) {
+      setSuccessCount((c) => c + doneCount)
+      // Recarrega lista para mostrar os novos documentos
+      await loadDocuments()
+      // Agenda um segundo reload após 3s para pegar status "indexed"
+      setTimeout(loadDocuments, 3000)
+    }
+  }, [queue, metadata, loadDocuments])
+
+  // ── Deletar documento ───────────────────────────────────────────────────────
+  const handleDelete = useCallback(async (id) => {
+    await documentService.delete(id)
+    setDocuments((prev) => prev.filter((d) => d.id !== id))
+  }, [])
 
   const pendingCount = queue.filter((f) => f.status === 'pending').length
-  const allDone      = queue.length > 0 && queue.every((f) => f.status === 'done' || f.status === 'error')
 
   return (
     <div className="flex h-screen overflow-hidden bg-base">
-      {/* Sidebar */}
-      <Sidebar
-        onNewChat={() => navigate('/chat')}
-        collapsed={!sidebarOpen}
-        onToggle={() => setSidebarOpen((v) => !v)}
-      />
+      <Sidebar open={sidebarOpen} onToggle={() => setSidebarOpen((v) => !v)} />
 
-      {/* Conteúdo principal */}
-      <main className="flex-1 overflow-y-auto min-w-0">
-        {/* Header */}
-        <header className="sticky top-0 z-10 flex items-center gap-3 px-6 py-4
-                           border-b border-subtle bg-surface/90 backdrop-blur min-h-[64px]">
-          <button
-            onClick={() => navigate('/chat')}
-            className="p-1.5 rounded-lg text-slate-muted hover:text-slate-soft hover:bg-elevated transition-colors"
-          >
-            <ArrowLeft size={16} />
-          </button>
-          <div>
-            <h1 className="font-display font-bold text-base text-slate-soft">
-              Envio de documentos
-            </h1>
-            <p className="text-xs text-slate-muted font-mono">
-              Upload · Indexação · RAG
-            </p>
+      <main className="flex-1 overflow-y-auto">
+        <div className="max-w-2xl mx-auto px-4 py-8 space-y-8">
+
+          {/* Cabeçalho */}
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => navigate('/chat')}
+              className="p-2 rounded-lg text-slate-muted hover:text-slate-soft hover:bg-elevated transition-colors"
+            >
+              <ArrowLeft size={18} />
+            </button>
+            <div>
+              <h1 className="font-display font-bold text-xl text-slate-soft">
+                Envio de documentos
+              </h1>
+              <p className="text-xs text-slate-muted font-mono mt-0.5">
+                Upload · Indexação · RAG
+              </p>
+            </div>
           </div>
-        </header>
 
-        <div className="max-w-3xl mx-auto px-6 py-8 space-y-8 animate-fade-in">
-
-          {/* ── Banner de sucesso ───────────────────────────────────────── */}
-          {allDone && successCount > 0 && (
-            <div className="flex items-center gap-3 px-4 py-3 rounded-xl
-                            bg-electric-400/10 border border-electric-400/30 animate-slide-up">
+          {/* Banner de sucesso */}
+          {successCount > 0 && (
+            <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-electric-400/10 border border-electric-400/20 animate-slide-up">
               <CheckCircle2 size={18} className="text-accent shrink-0" />
               <div>
-                <p className="text-sm font-display font-semibold text-accent">
-                  {successCount} documento{successCount > 1 ? 's' : ''} indexado{successCount > 1 ? 's' : ''} com sucesso!
+                <p className="text-sm font-medium text-slate-soft">
+                  {successCount} arquivo{successCount > 1 ? 's' : ''} indexado{successCount > 1 ? 's' : ''} com sucesso!
                 </p>
                 <p className="text-xs text-slate-muted font-mono mt-0.5">
                   Já disponível para busca semântica via RAG
@@ -160,13 +172,13 @@ export default function UploadPage() {
             </div>
           )}
 
-          {/* ── Seção de upload ─────────────────────────────────────────── */}
+          {/* Seção 1 — Selecionar arquivos */}
           <section className="space-y-5">
             <SectionTitle number="1" label="Selecione os arquivos" />
             <DropZone onFilesSelected={handleFilesSelected} />
           </section>
 
-          {/* ── Metadados ───────────────────────────────────────────────── */}
+          {/* Seção 2 — Metadados */}
           <section className="space-y-5">
             <SectionTitle number="2" label="Preencha os metadados" />
             <div className="card">
@@ -178,13 +190,12 @@ export default function UploadPage() {
             </div>
           </section>
 
-          {/* ── Fila ────────────────────────────────────────────────────── */}
+          {/* Seção 3 — Fila e envio */}
           {queue.length > 0 && (
             <section className="space-y-5 animate-slide-up">
               <SectionTitle number="3" label="Revisar e enviar" />
               <FileQueue files={queue} onRemove={handleRemove} />
 
-              {/* Botão de envio */}
               {pendingCount > 0 && (
                 <button
                   onClick={handleUploadAll}
@@ -204,9 +215,14 @@ export default function UploadPage() {
             </section>
           )}
 
-          {/* ── Documentos já indexados ──────────────────────────────────── */}
+          {/* Seção — Documentos indexados */}
           <section className="space-y-4 pt-4 border-t border-subtle">
-            <DocumentList refreshTrigger={successCount} />
+            <DocumentList
+              documents={documents}
+              loading={docsLoading}
+              onDelete={handleDelete}
+              onRefresh={loadDocuments}
+            />
           </section>
 
         </div>
